@@ -27,8 +27,3 @@ export async function fetchDidSettings(): Promise<DidSettings | null> {
   if (error) throw error;
   return (data as DidSettings) ?? null;
 }
-
-export async function saveDidSettings(id: string, values: Partial<DidSettings>) {
-  const { error } = await supabase.from("did_settings").update(values).eq("id", id);
-  if (error) throw error;
-}

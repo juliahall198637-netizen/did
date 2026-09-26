@@ -65,6 +65,33 @@ export type Database = {
         }
         Relationships: []
       }
+      openai_settings: {
+        Row: {
+          api_key: string
+          created_at: string
+          id: string
+          singleton: boolean
+          stt_model: string
+          updated_at: string
+        }
+        Insert: {
+          api_key?: string
+          created_at?: string
+          id?: string
+          singleton?: boolean
+          stt_model?: string
+          updated_at?: string
+        }
+        Update: {
+          api_key?: string
+          created_at?: string
+          id?: string
+          singleton?: boolean
+          stt_model?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string

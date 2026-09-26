@@ -1,207 +1,166 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, Clipboard, Mic, MicOff, Trash2 } from "lucide-react";
+import { useServerFn } from "@tanstack/react-start";
+import { Check, Clipboard, Loader2, Mic, MicOff, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-
-type SpeechResult = {
-  isFinal: boolean;
-  [index: number]: { transcript: string };
-};
-
-type SpeechResultEvent = Event & {
-  resultIndex: number;
-  results: {
-    length: number;
-    [index: number]: SpeechResult;
-  };
-};
-
-type SpeechErrorEvent = Event & { error: string };
-
-type SpeechRecognitionInstance = EventTarget & {
-  lang: string;
-  continuous: boolean;
-  interimResults: boolean;
-  maxAlternatives: number;
-  start: () => void;
-  stop: () => void;
-  abort: () => void;
-  onstart: (() => void) | null;
-  onaudiostart: (() => void) | null;
-  onspeechstart: (() => void) | null;
-  onresult: ((event: SpeechResultEvent) => void) | null;
-  onerror: ((event: SpeechErrorEvent) => void) | null;
-  onend: (() => void) | null;
-};
-
-type SpeechRecognitionConstructor = new () => SpeechRecognitionInstance;
-
-type SpeechWindow = Window &
-  typeof globalThis & {
-    SpeechRecognition?: SpeechRecognitionConstructor;
-    webkitSpeechRecognition?: SpeechRecognitionConstructor;
-  };
-
-const ERROR_MESSAGES: Record<string, string> = {
-  "not-allowed": "اجازه میکروفون داده نشده است.",
-  "service-not-allowed": "سرویس تشخیص گفتار در دسترس نیست.",
-  "audio-capture": "میکروفون پیدا نشد یا در اختیار برنامه دیگری است.",
-  network: "ارتباط با سرویس تشخیص گفتار برقرار نشد.",
-  language: "تشخیص زبان فارسی در این مرورگر در دسترس نیست.",
-  "no-speech": "صدایی شنیده نشد. نزدیک میکروفون و واضح‌تر صحبت کنید.",
-};
+import { transcribePersianAudio } from "@/lib/openai.functions";
+import {
+  isVoiceRecordingSupported,
+  startVoiceRecorder,
+  type VoiceRecorder,
+} from "@/lib/voice-recorder";
 
 const START_EVENT = "persian-conversation-start";
 const STOP_EVENT = "persian-conversation-stop";
 const SPEAK_EVENT = "persian-user-utterance";
+const AGENT_SPEAK_EVENT = "persian-agent-speak";
+
+// Rough time the avatar needs to start and finish saying a text; the
+// microphone ignores that window so the avatar's voice is not transcribed.
+const AGENT_START_MS = 2_500;
+const AGENT_MS_PER_CHAR = 80;
+const AGENT_MAX_MS = 30_000;
+
+type Phase = "idle" | "listening" | "hearing";
+
+function fileNameFor(type: string) {
+  if (type.includes("mp4")) return "speech.mp4";
+  if (type.includes("ogg")) return "speech.ogg";
+  return "speech.webm";
+}
 
 export function PersianSpeechNotes() {
-  const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
-  const shouldListenRef = useRef(false);
-  const restartTimerRef = useRef<number | null>(null);
-  const recognitionActiveRef = useRef(false);
+  const transcribe = useServerFn(transcribePersianAudio);
+  const recorderRef = useRef<VoiceRecorder | null>(null);
+  const queueRef = useRef<Promise<void>>(Promise.resolve());
+  const agentUntilRef = useRef(0);
   const [supported, setSupported] = useState(true);
-  const [listening, setListening] = useState(false);
+  const [active, setActive] = useState(false);
+  const [phase, setPhase] = useState<Phase>("idle");
+  const [agentSpeaking, setAgentSpeaking] = useState(false);
+  const [converting, setConverting] = useState(0);
   const [transcript, setTranscript] = useState("");
-  const [interim, setInterim] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    const speechWindow = window as SpeechWindow;
-    const Recognition = speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition;
-    if (!Recognition) {
-      setSupported(false);
-      return;
-    }
+    setSupported(isVoiceRecordingSupported());
 
-    const recognition = new Recognition();
-    recognition.lang = "fa-IR";
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.maxAlternatives = 1;
-
-    recognition.onstart = () => {
-      recognitionActiveRef.current = true;
-      setListening(true);
-      setError(null);
+    let agentTimer: number | null = null;
+    const onAgentSpeak = (event: Event) => {
+      const text = (event as CustomEvent<{ text?: string }>).detail?.text ?? "";
+      const duration = Math.min(AGENT_MAX_MS, AGENT_START_MS + text.length * AGENT_MS_PER_CHAR);
+      agentUntilRef.current = Math.max(agentUntilRef.current, performance.now() + duration);
+      setAgentSpeaking(true);
+      if (agentTimer !== null) window.clearTimeout(agentTimer);
+      agentTimer = window.setTimeout(
+        () => setAgentSpeaking(false),
+        agentUntilRef.current - performance.now(),
+      );
     };
 
-    recognition.onaudiostart = () => setError(null);
-    recognition.onspeechstart = () => setError(null);
-
-    recognition.onresult = (event) => {
-      let finalText = "";
-      let interimText = "";
-      for (let index = event.resultIndex; index < event.results.length; index += 1) {
-        const result = event.results[index];
-        if (!result) continue;
-        const phrase = result?.[0]?.transcript?.trim();
-        if (!phrase) continue;
-        if (result.isFinal) finalText += `${phrase} `;
-        else interimText += `${phrase} `;
-      }
-      if (finalText) {
-        const sentence = finalText.trim();
-        setTranscript((current) => `${current}${current ? " " : ""}${sentence}`);
-        window.dispatchEvent(new CustomEvent(SPEAK_EVENT, { detail: { text: sentence } }));
-      }
-      setInterim(interimText.trim());
-    };
-
-    recognition.onerror = (event) => {
-      if (event.error === "aborted") return;
-      if (event.error === "no-speech" && shouldListenRef.current) {
-        setError(ERROR_MESSAGES["no-speech"] ?? "صدایی شنیده نشد. دوباره صحبت کنید.");
-        return;
-      }
-      shouldListenRef.current = false;
-      recognitionActiveRef.current = false;
-      setListening(false);
-      setError(ERROR_MESSAGES[event.error] ?? "تشخیص گفتار متوقف شد. دوباره تلاش کنید.");
-    };
-
-    recognition.onend = () => {
-      recognitionActiveRef.current = false;
-      setInterim("");
-      if (!shouldListenRef.current) {
-        setListening(false);
-        return;
-      }
-      restartTimerRef.current = window.setTimeout(() => {
-        try {
-          recognition.lang = "fa-IR";
-          recognition.start();
-        } catch {
-          shouldListenRef.current = false;
-          setListening(false);
-          setError("تشخیص گفتار متوقف شد. دوباره شروع کنید.");
-        }
-      }, 250);
-    };
-
-    recognitionRef.current = recognition;
+    window.addEventListener(AGENT_SPEAK_EVENT, onAgentSpeak);
     return () => {
-      shouldListenRef.current = false;
-      if (restartTimerRef.current !== null) window.clearTimeout(restartTimerRef.current);
-      recognition.abort();
-      recognitionActiveRef.current = false;
-      recognitionRef.current = null;
+      window.removeEventListener(AGENT_SPEAK_EVENT, onAgentSpeak);
+      if (agentTimer !== null) window.clearTimeout(agentTimer);
+      recorderRef.current?.stop();
+      recorderRef.current = null;
     };
   }, []);
 
-  function toggleListening() {
-    const recognition = recognitionRef.current;
-    if (!recognition) return;
-    setError(null);
-
-    if (shouldListenRef.current) {
-      shouldListenRef.current = false;
-      setListening(false);
-      setInterim("");
-      window.dispatchEvent(new Event(STOP_EVENT));
-      if (recognitionActiveRef.current) recognition.stop();
-      return;
-    }
-
-    void startListening(recognition);
-  }
-
-  async function startListening(recognition: SpeechRecognitionInstance) {
+  async function convertSegment(audio: Blob, recorder: VoiceRecorder) {
+    const form = new FormData();
+    form.append("audio", audio, fileNameFor(audio.type));
     try {
-      if (!navigator.mediaDevices?.getUserMedia) {
-        setError("این مرورگر امکان دسترسی به میکروفون را ندارد. از Chrome استفاده کنید.");
+      const result = await transcribe({ data: form });
+      if (!result.ok) {
+        setError(result.message);
         return;
       }
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-      });
-      stream.getTracks().forEach((t) => t.stop());
-      shouldListenRef.current = true;
-      setListening(true);
-      recognition.lang = "fa-IR";
-      window.dispatchEvent(new Event(START_EVENT));
-      recognition.start();
+      setError(null);
+      if (!result.text) return;
+      const text = result.text;
+      setTranscript((current) => (current ? `${current}\n${text}` : text));
+      // Only hand the text to the avatar if this conversation is still running.
+      if (recorderRef.current === recorder) {
+        window.dispatchEvent(new CustomEvent(SPEAK_EVENT, { detail: { text } }));
+      }
     } catch (caught) {
-      shouldListenRef.current = false;
-      setListening(false);
+      setError(`تبدیل صدا به متن ناموفق بود: ${(caught as Error).message}`);
+    }
+  }
+
+  function enqueueSegment(audio: Blob, recorder: VoiceRecorder) {
+    setConverting((count) => count + 1);
+    // Convert one sentence at a time so the text keeps its spoken order.
+    queueRef.current = queueRef.current
+      .then(() => convertSegment(audio, recorder))
+      .finally(() => setConverting((count) => count - 1));
+  }
+
+  async function startConversation() {
+    setError(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          channelCount: 1,
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
+      let recorder: VoiceRecorder;
+      try {
+        recorder = startVoiceRecorder(stream, {
+          onSegment: (audio) => enqueueSegment(audio, recorder),
+          onSpeechChange: (speaking) => setPhase(speaking ? "hearing" : "listening"),
+          isPaused: () => performance.now() < agentUntilRef.current,
+        });
+      } catch (caught) {
+        stream.getTracks().forEach((track) => track.stop());
+        throw caught;
+      }
+      recorderRef.current = recorder;
+      setActive(true);
+      setPhase("listening");
+      window.dispatchEvent(new Event(START_EVENT));
+    } catch (caught) {
       const errorName = caught instanceof DOMException ? caught.name : "";
       setError(
         errorName === "NotAllowedError"
           ? "دسترسی میکروفون بسته است. آن را از تنظیمات کنار نوار آدرس مجاز کنید."
-          : "میکروفون یا تشخیص گفتار شروع نشد. در Chrome صفحه را تازه کنید و دوباره بزنید.",
+          : errorName === "NotFoundError"
+            ? "میکروفونی پیدا نشد."
+            : errorName === "NotReadableError"
+              ? "میکروفون در اختیار برنامه دیگری است."
+              : "میکروفون شروع نشد. صفحه را تازه کنید و دوباره بزنید.",
       );
     }
   }
 
+  function stopConversation() {
+    recorderRef.current?.stop();
+    recorderRef.current = null;
+    setActive(false);
+    setPhase("idle");
+    window.dispatchEvent(new Event(STOP_EVENT));
+  }
+
   async function copyNotes() {
-    const text = [transcript, interim].filter(Boolean).join(" ");
-    if (!text) return;
-    await navigator.clipboard.writeText(text);
+    if (!transcript) return;
+    await navigator.clipboard.writeText(transcript);
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1800);
   }
 
-  const hasText = Boolean(transcript || interim);
+  const status = !supported
+    ? "مرورگر شما ضبط صدا را پشتیبانی نمی‌کند؛ از Chrome یا Safari جدید استفاده کنید."
+    : !active
+      ? "برای شروع، دکمه «شروع مکالمه» را بزنید."
+      : agentSpeaking
+        ? "آواتار در حال صحبت است…"
+        : phase === "hearing"
+          ? "صدای شما دریافت می‌شود…"
+          : "در حال شنیدن فارسی… صحبت کنید.";
 
   return (
     <section
@@ -213,38 +172,55 @@ export function PersianSpeechNotes() {
         <Button
           type="button"
           size="lg"
-          variant={listening ? "destructive" : "default"}
-          onClick={toggleListening}
+          variant={active ? "destructive" : "default"}
+          onClick={active ? stopConversation : () => void startConversation()}
           disabled={!supported}
-          className={`flex-1 text-base ${listening ? "animate-pulse" : ""}`}
+          className={`flex-1 text-base ${phase === "hearing" ? "animate-pulse" : ""}`}
         >
-          {listening ? <MicOff /> : <Mic />}
-          {listening ? "پایان مکالمه" : "شروع مکالمه"}
+          {active ? <MicOff /> : <Mic />}
+          {active ? "پایان مکالمه" : "شروع مکالمه"}
         </Button>
-        <Button type="button" size="icon" variant="ghost" onClick={copyNotes} disabled={!hasText} aria-label="کپی یادداشت" title="کپی یادداشت">
+        <Button
+          type="button"
+          size="icon"
+          variant="ghost"
+          onClick={copyNotes}
+          disabled={!transcript}
+          aria-label="کپی یادداشت"
+          title="کپی یادداشت"
+        >
           {copied ? <Check /> : <Clipboard />}
         </Button>
-        <Button type="button" size="icon" variant="ghost" onClick={() => { setTranscript(""); setInterim(""); }} disabled={!hasText} aria-label="پاک‌کردن یادداشت" title="پاک‌کردن یادداشت">
+        <Button
+          type="button"
+          size="icon"
+          variant="ghost"
+          onClick={() => setTranscript("")}
+          disabled={!transcript}
+          aria-label="پاک‌کردن یادداشت"
+          title="پاک‌کردن یادداشت"
+        >
           <Trash2 />
         </Button>
       </div>
-      <p className="px-4 pt-2 text-xs text-muted-foreground">
-        {!supported
-          ? "مرورگر شما تشخیص گفتار فارسی را پشتیبانی نمی‌کند؛ از Chrome استفاده کنید."
-          : listening
-            ? "در حال شنیدن فارسی… صحبت کنید."
-            : "برای شروع، دکمه «شروع مکالمه» را بزنید."}
+      <p className="flex items-center gap-2 px-4 pt-2 text-xs text-muted-foreground">
+        {status}
+        {converting > 0 && (
+          <span className="inline-flex items-center gap-1">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            در حال تبدیل صدا به متن…
+          </span>
+        )}
       </p>
-      <div aria-live="polite" className="max-h-28 min-h-14 overflow-y-auto px-4 py-3 text-sm leading-7">
-        {error ? (
-          <p className="text-destructive">{error}</p>
-        ) : hasText ? (
-          <p className="text-foreground">
-            {transcript}
-            {interim && <span className="text-muted-foreground"> {interim}</span>}
-          </p>
+      <div
+        aria-live="polite"
+        className="max-h-28 min-h-14 overflow-y-auto whitespace-pre-line px-4 py-3 text-sm leading-7"
+      >
+        {error && <p className="text-destructive">{error}</p>}
+        {transcript ? (
+          <p className="text-foreground">{transcript}</p>
         ) : (
-          <p className="text-muted-foreground">صحبت‌های شما اینجا نوشته می‌شوند.</p>
+          !error && <p className="text-muted-foreground">صحبت‌های شما اینجا نوشته می‌شوند.</p>
         )}
       </div>
     </section>

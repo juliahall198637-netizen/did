@@ -45,24 +45,23 @@ function Index() {
           <div className="mx-auto max-w-sm px-6 text-center">
             <h1 className="text-xl font-semibold text-foreground">آواتار هنوز تنظیم نشده است</h1>
             <p className="mt-3 text-sm leading-7 text-muted-foreground">
-              برای نمایش آواتار، وارد پنل مدیریت شوید و «Client Key» و «Agent ID» ایجنت D-ID خود را
-              ذخیره کنید. اگر هنوز حساب مدیر نساخته‌اید، اولین حسابی که ثبت‌نام کند مدیر می‌شود.
+              برای نمایش آواتار، وارد پنل مدیریت شوید و «Client Key» و «Agent ID» ایجنت D-ID و کلید
+              OpenAI را ذخیره کنید.
             </p>
             <Link
-              to="/admin/login"
+              to="/admin"
               className="mt-6 inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
             >
               ورود به پنل مدیریت
             </Link>
           </div>
         )}
-
       </div>
 
       {configured && <PersianSpeechNotes />}
 
       <Link
-        to="/admin/login"
+        to="/admin"
         aria-label="تنظیمات"
         className="absolute left-4 top-4 z-20 rounded-full p-2 text-muted-foreground/30 transition-colors hover:text-muted-foreground"
       >

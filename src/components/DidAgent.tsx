@@ -29,6 +29,13 @@ const TARGET_ID = "did-agent-target";
 const START_EVENT = "persian-conversation-start";
 const STOP_EVENT = "persian-conversation-stop";
 const SPEAK_EVENT = "persian-user-utterance";
+// Fired whenever the avatar is told to talk, so the microphone can pause and
+// never transcribe the avatar's own voice.
+const AGENT_SPEAK_EVENT = "persian-agent-speak";
+
+function announceAgentSpeech(text: string) {
+  window.dispatchEvent(new CustomEvent(AGENT_SPEAK_EVENT, { detail: { text } }));
+}
 
 export function DidAgent({ settings, onStatusChange }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -39,8 +46,6 @@ export function DidAgent({ settings, onStatusChange }: Props) {
   useEffect(() => {
     setOrigin(window.location.origin);
   }, []);
-
-
 
   useEffect(() => {
     onStatusChange?.(status);
@@ -61,7 +66,9 @@ export function DidAgent({ settings, onStatusChange }: Props) {
       const root = getAgentRoot();
       const buttons = root ? Array.from(root.querySelectorAll<HTMLButtonElement>("button")) : [];
       const startButton = buttons.find((button) =>
-        /start call|start conversation|شروع/i.test(`${button.textContent ?? ""} ${button.getAttribute("aria-label") ?? ""}`),
+        /start call|start conversation|شروع/i.test(
+          `${button.textContent ?? ""} ${button.getAttribute("aria-label") ?? ""}`,
+        ),
       );
       startButton?.click();
       return Boolean(startButton);
@@ -80,6 +87,7 @@ export function DidAgent({ settings, onStatusChange }: Props) {
         return;
       }
       muteAgentMic();
+      announceAgentSpeech(text);
       void speak({ type: "text", input: text });
     };
 
@@ -111,11 +119,15 @@ export function DidAgent({ settings, onStatusChange }: Props) {
         muteTimers.push(window.setTimeout(muteAgentMic, delay));
       });
 
-      greetingTimer = window.setTimeout(() => {
-        flushPending();
-        const speak = window.DID_AGENTS_API?.functions?.speak;
-        if (speak && pending.length === 0) void speak({ type: "text", input: "سلام، در خدمتم." });
-      }, clickedStart ? 3500 : 2500);
+      greetingTimer = window.setTimeout(
+        () => {
+          flushPending();
+          if (window.DID_AGENTS_API?.functions?.speak && pending.length === 0) {
+            speakText("سلام، در خدمتم.");
+          }
+        },
+        clickedStart ? 3500 : 2500,
+      );
     };
 
     const stopConversation = () => {
@@ -182,14 +194,12 @@ export function DidAgent({ settings, onStatusChange }: Props) {
       if (target && target.childElementCount === 0) setStatus("empty");
     }, 9000);
 
-
     return () => {
       window.clearTimeout(timeout);
       script.remove();
       document.querySelectorAll("script[data-lovable-did-agent]").forEach((el) => el.remove());
       if (target) target.innerHTML = "";
     };
-
   }, [
     settings.embed_script_url,
     settings.mode,
@@ -243,7 +253,6 @@ export function DidAgent({ settings, onStatusChange }: Props) {
           </div>
         </div>
       )}
-
     </div>
   );
 }
