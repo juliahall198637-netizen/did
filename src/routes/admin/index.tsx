@@ -9,6 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DID_SETTINGS_QUERY_KEY, fetchDidSettings } from "@/lib/did-settings";
 import type { DidSettings } from "@/lib/did-settings";
+import { LiveKitSettingsCard } from "@/components/admin/LiveKitSettingsCard";
 import { getDidKeyStatus, saveDidSettings, testDidConnection } from "@/lib/did.functions";
 import {
   STT_MODELS,
@@ -110,8 +111,20 @@ function AdminPanel() {
     setBusy(true);
     setSaveMsg(null);
     try {
-      const { id: _id, ...values } = form;
-      const result = await runSaveDid({ data: values });
+      const result = await runSaveDid({
+        data: {
+          client_key: form.client_key,
+          agent_id: form.agent_id,
+          embed_script_url: form.embed_script_url,
+          mode: form.mode,
+          name: form.name,
+          monitor: form.monitor,
+          light_mode: form.light_mode,
+          orientation: form.orientation,
+          position: form.position,
+          open_mode: form.open_mode,
+        },
+      });
       if (result.ok) await queryClient.invalidateQueries({ queryKey: DID_SETTINGS_QUERY_KEY });
       setSaveMsg(result.message);
     } catch (error) {
@@ -289,6 +302,8 @@ function AdminPanel() {
             {openAiMsg && <p className="text-sm text-muted-foreground">{openAiMsg}</p>}
           </CardContent>
         </Card>
+
+        {settingsQuery.data && <LiveKitSettingsCard settings={settingsQuery.data} />}
 
         <Card>
           <CardHeader>

@@ -218,3 +218,43 @@ npm run dev
 docker build -t did-app .
 docker run -p 3000:3000 -e SUPABASE_URL=... -e SUPABASE_PUBLISHABLE_KEY=... -e SUPABASE_SERVICE_ROLE_KEY=... did-app
 ```
+
+## حالت LiveKit (ایجنت صوتی کامل با آواتار D-ID)
+
+در این حالت صدای کاربر از راه یک اتاق LiveKit به پروسه ایجنت (پوشه `agent/`) می‌رسد. ایجنت:
+
+1. گفتار فارسی را با OpenAI به متن تبدیل می‌کند،
+2. با یک مدل OpenAI پاسخ فارسی می‌سازد،
+3. پاسخ را با OpenAI به صدا تبدیل می‌کند،
+4. و آواتار D-ID (نوع expressive / v4) پاسخ را با حرکت لب در اتاق پخش می‌کند.
+
+اگر LiveKit تنظیم نشده باشد، صفحه اصلی همان حالت قبلی (embed ایجنت D-ID) را نشان می‌دهد.
+
+### راه‌اندازی
+
+1. یک پروژه در [LiveKit Cloud](https://cloud.livekit.io) بسازید و `LIVEKIT_URL`، `LIVEKIT_API_KEY` و `LIVEKIT_API_SECRET` را بردارید.
+2. یک ایجنت expressive در D-ID بسازید:
+
+   ```sh
+   curl -X POST https://api.d-id.com/agents \
+     -H "Authorization: Basic <DID_API_KEY>" \
+     -H "Content-Type: application/json" \
+     -d '{"presenter":{"type":"expressive","presenter_id":"public_mia_elegant@avt_TJ0Tq5"},"preview_name":"Persian Agent"}'
+   ```
+
+3. migration ‏`supabase/migrations/20260926170000_livekit_settings.sql` را اجرا کنید.
+4. روی سرور وب‌سایت این متغیرها را تنظیم کنید: `LIVEKIT_URL`، `LIVEKIT_API_KEY`، `LIVEKIT_API_SECRET`.
+5. در پنل مدیریت، بخش «ایجنت صوتی LiveKit»، شناسه ایجنت D-ID، دستورالعمل، خوشامد، مدل و صدا را ذخیره کنید.
+6. پروسه ایجنت را اجرا کنید (فایل `agent/.env.example` را به `agent/.env` کپی و پر کنید):
+   - روی LiveKit Cloud: در پوشه `agent` دستور `lk agent create --secrets-file=.env` را اجرا کنید. اعتبارنامه‌های LiveKit خودکار تزریق می‌شوند.
+   - روی هر میزبان Docker دیگر:
+
+     ```sh
+     cd agent
+     docker build -t persian-avatar-agent .
+     docker run --env-file .env persian-avatar-agent
+     ```
+
+   - برای توسعه محلی: `cd agent && npm install && npm run dev`
+
+پروسه ایجنت باید جایی اجرا شود که OpenAI و D-ID به آن سرویس می‌دهند.

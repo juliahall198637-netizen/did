@@ -20,8 +20,12 @@ export type Database = {
           client_key: string
           created_at: string
           embed_script_url: string
+          greeting: string
           id: string
+          instructions: string
           light_mode: boolean
+          livekit_agent_id: string
+          llm_model: string
           mode: string
           monitor: boolean
           name: string
@@ -29,6 +33,7 @@ export type Database = {
           orientation: string
           position: string
           singleton: boolean
+          tts_voice: string
           updated_at: string
         }
         Insert: {
@@ -36,8 +41,12 @@ export type Database = {
           client_key?: string
           created_at?: string
           embed_script_url?: string
+          greeting?: string
           id?: string
+          instructions?: string
           light_mode?: boolean
+          livekit_agent_id?: string
+          llm_model?: string
           mode?: string
           monitor?: boolean
           name?: string
@@ -45,6 +54,7 @@ export type Database = {
           orientation?: string
           position?: string
           singleton?: boolean
+          tts_voice?: string
           updated_at?: string
         }
         Update: {
@@ -52,8 +62,12 @@ export type Database = {
           client_key?: string
           created_at?: string
           embed_script_url?: string
+          greeting?: string
           id?: string
+          instructions?: string
           light_mode?: boolean
+          livekit_agent_id?: string
+          llm_model?: string
           mode?: string
           monitor?: boolean
           name?: string
@@ -61,6 +75,7 @@ export type Database = {
           orientation?: string
           position?: string
           singleton?: boolean
+          tts_voice?: string
           updated_at?: string
         }
         Relationships: []

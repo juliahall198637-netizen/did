@@ -1,9 +1,12 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 import { Settings } from "lucide-react";
 import { DidAgent } from "@/components/DidAgent";
+import { LiveKitConversation } from "@/components/LiveKitConversation";
 import { PersianSpeechNotes } from "@/components/PersianSpeechNotes";
 import { DID_SETTINGS_QUERY_KEY, fetchDidSettings } from "@/lib/did-settings";
+import { getLiveKitStatus } from "@/lib/livekit.functions";
 
 export const Route = createFileRoute("/")({
   ssr: false,
@@ -32,13 +35,25 @@ function Index() {
     queryFn: fetchDidSettings,
   });
 
-  const configured = Boolean(data?.client_key && data?.agent_id);
+  const runLiveKitStatus = useServerFn(getLiveKitStatus);
+  const livekit = useQuery({
+    queryKey: ["livekit-status"],
+    queryFn: () => runLiveKitStatus(),
+    retry: false,
+  });
+
+  // LiveKit (full voice agent) wins when it is configured; otherwise the page
+  // keeps using the D-ID embed with OpenAI speech-to-text.
+  const useLiveKit = Boolean(livekit.data?.enabled);
+  const configured = !useLiveKit && Boolean(data?.client_key && data?.agent_id);
 
   return (
     <main dir="rtl" className="relative h-screen w-screen overflow-hidden bg-background">
       <div className="absolute inset-0 flex h-full w-full items-center justify-center [&>div]:h-full [&>div]:w-full">
-        {isLoading ? (
+        {isLoading || livekit.isLoading ? (
           <p className="text-sm text-muted-foreground">در حال آماده‌سازی…</p>
+        ) : useLiveKit ? (
+          <LiveKitConversation />
         ) : configured && data ? (
           <DidAgent settings={data} />
         ) : (

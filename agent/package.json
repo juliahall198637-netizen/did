@@ -1,0 +1,25 @@
+{
+  "name": "persian-avatar-agent",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/agent.ts dev",
+    "start": "node dist/agent.js start",
+    "download-files": "node dist/agent.js download-files",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@livekit/agents": "1.9.1",
+    "@livekit/agents-plugin-did": "1.9.1",
+    "@livekit/agents-plugin-openai": "1.9.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.16.5",
+    "tsx": "^4.20.0",
+    "typescript": "^5.8.3"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

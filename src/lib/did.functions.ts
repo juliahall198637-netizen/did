@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import type { TablesUpdate } from "@/integrations/supabase/types";
 import { parseInput } from "@/lib/validation";
 
 // The embed script runs on the public page, so only D-ID's own script host is
@@ -23,16 +24,41 @@ const didSettingsSchema = z.object({
   orientation: z.string().trim().max(50),
   position: z.string().trim().max(50),
   open_mode: z.string().trim().max(50),
+  // LiveKit voice agent
+  livekit_agent_id: z.string().trim().max(200),
+  instructions: z.string().trim().min(1, "دستورالعمل ایجنت خالی است.").max(4000),
+  greeting: z.string().trim().max(500),
+  llm_model: z
+    .string()
+    .trim()
+    .regex(/^[A-Za-z0-9][A-Za-z0-9._-]{1,63}$/, "نام مدل معتبر نیست."),
+  tts_voice: z
+    .string()
+    .trim()
+    .regex(/^[a-z]{2,20}$/, "نام صدا معتبر نیست."),
 });
 
+// Each panel card saves only its own fields, so the D-ID embed card keeps
+// working before the LiveKit migration has added its columns.
+const saveSchema = didSettingsSchema.partial();
+
 export const saveDidSettings = createServerFn({ method: "POST" })
-  .inputValidator((data: z.input<typeof didSettingsSchema>) => parseInput(didSettingsSchema, data))
+  .inputValidator((data: z.input<typeof saveSchema>) => parseInput(saveSchema, data))
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { error } = await supabaseAdmin.from("did_settings").update(data).eq("singleton", true);
+    const values = Object.fromEntries(
+      Object.entries(data).filter(([, value]) => value !== undefined),
+    ) as TablesUpdate<"did_settings">;
+    const { error } = await supabaseAdmin.from("did_settings").update(values).eq("singleton", true);
     if (error) {
       console.error("[did] saving did_settings failed", error);
-      return { ok: false, message: `ذخیره ناموفق بود: ${error.message}` };
+      const missingColumn = /column|schema cache/i.test(error.message);
+      return {
+        ok: false,
+        message: missingColumn
+          ? "ذخیره ناموفق بود؛ migration ‎20260926170000_livekit_settings.sql را اجرا کنید."
+          : `ذخیره ناموفق بود: ${error.message}`,
+      };
     }
     return { ok: true, message: "تنظیمات ذخیره شد." };
   });
