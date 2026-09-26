@@ -1,0 +1,12 @@
+node_modules
+.output
+.nitro
+.tanstack
+.wrangler
+dist
+.git
+.claude
+.agents
+.lovable
+bun.lock
+*.log

@@ -190,3 +190,31 @@ cd <repository-name>
 npm i
 npm run dev
 ```
+
+## استقرار روی لیارا (Liara)
+
+پروژه با `Dockerfile` و `liara.json` برای پلتفرم Docker لیارا آماده است. در این حالت nitro به‌جای Cloudflare یک سرور Node.js می‌سازد و برنامه روی پورت `3000` اجرا می‌شود.
+
+1. در کنسول لیارا یک برنامه از نوع **Docker** بسازید.
+2. متغیرهای محیطی برنامه را تنظیم کنید:
+   - `SUPABASE_URL` و `SUPABASE_PUBLISHABLE_KEY` (همان مقادیر فایل `.env`)
+   - `SUPABASE_SERVICE_ROLE_KEY` (برای ذخیره تنظیمات از پنل مدیریت)
+   - `OPENAI_API_KEY` (اختیاری؛ اگر کلید در پنل ذخیره نشده باشد استفاده می‌شود)
+   - `DID_API_KEY` (اختیاری؛ برای «تست اتصال API» در پنل)
+3. استقرار با Liara CLI:
+
+   ```sh
+   npm i -g @liara/cli
+   liara login
+   liara deploy --app <نام-برنامه>
+   ```
+
+   یا در کنسول لیارا گزینه **استقرار جدید** را بزنید و فایل zip پروژه (بدون `node_modules`) را آپلود کنید.
+4. در پنل D-ID، بخش Allowed Domains، دامنه برنامه در لیارا را اضافه کنید.
+
+آزمایش محلی همان image:
+
+```sh
+docker build -t did-app .
+docker run -p 3000:3000 -e SUPABASE_URL=... -e SUPABASE_PUBLISHABLE_KEY=... -e SUPABASE_SERVICE_ROLE_KEY=... did-app
+```
