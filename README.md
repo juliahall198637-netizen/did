@@ -258,3 +258,7 @@ docker run -p 3000:3000 -e SUPABASE_URL=... -e SUPABASE_PUBLISHABLE_KEY=... -e S
    - برای توسعه محلی: `cd agent && npm install && npm run dev`
 
 پروسه ایجنت باید جایی اجرا شود که OpenAI و D-ID به آن سرویس می‌دهند.
+
+## MCP سرویس D-ID برای Claude Code
+
+فایل `.mcp.json` سرور MCP سرویس D-ID (`https://docs.d-id.com/mcp`) را به Claude Code معرفی می‌کند تا به مستندات و API سرویس D-ID دسترسی داشته باشد. برای دسترسی به حساب D-ID، متغیر محیطی `DID_API_KEY` را تنظیم کنید؛ کلید در ریپو ذخیره نمی‌شود. Claude Code در اولین استفاده برای فعال‌کردن این سرور اجازه می‌گیرد.

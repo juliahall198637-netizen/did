@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "d-id": {
+      "type": "http",
+      "url": "https://docs.d-id.com/mcp",
+      "headers": {
+        "Authorization": "Basic ${DID_API_KEY:-}"
+      }
+    }
+  }
+}
